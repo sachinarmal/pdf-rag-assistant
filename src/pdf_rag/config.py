@@ -1,0 +1,67 @@
+"""Runtime settings, read from environment variables (and a `.env` file if present)."""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+
+def _env(name: str, default: str) -> str:
+    value = os.getenv(name)
+    return value if value not in (None, "") else default
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    return _env(name, str(default)).strip().lower() in {"1", "true", "yes", "on"}
+
+
+@dataclass(frozen=True)
+class Settings:
+    ollama_base_url: str
+    llm_model: str
+    llm_temperature: float
+    llm_reasoning: bool
+    embed_model: str
+    data_dir: Path
+    chroma_dir: Path
+    collection_name: str
+    ocr_lang: str
+    chunk_size: int
+    chunk_overlap: int
+    top_k: int
+
+    @property
+    def raw_dir(self) -> Path:
+        return self.data_dir / "raw"
+
+    @property
+    def pages_file(self) -> Path:
+        return self.data_dir / "processed" / "pages.jsonl"
+
+    @classmethod
+    def from_env(cls) -> "Settings":
+        data_dir = Path(_env("DATA_DIR", "data"))
+        return cls(
+            ollama_base_url=_env("OLLAMA_BASE_URL", "http://localhost:11434"),
+            llm_model=_env("LLM_MODEL", "qwen3:14b"),
+            llm_temperature=float(_env("LLM_TEMPERATURE", "0.2")),
+            llm_reasoning=_env_bool("LLM_REASONING", False),
+            embed_model=_env("EMBED_MODEL", "bge-m3"),
+            data_dir=data_dir,
+            chroma_dir=Path(_env("CHROMA_DIR", str(data_dir / "chroma"))),
+            collection_name=_env("COLLECTION_NAME", "pdf_rag"),
+            ocr_lang=_env("OCR_LANG", "eng"),
+            chunk_size=int(_env("CHUNK_SIZE", "1000")),
+            chunk_overlap=int(_env("CHUNK_OVERLAP", "150")),
+            top_k=int(_env("TOP_K", "5")),
+        )
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    load_dotenv()
+    return Settings.from_env()
