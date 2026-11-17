@@ -11,7 +11,7 @@ def make_settings(**overrides) -> Settings:
     base = dict(
         ollama_base_url="http://localhost:11434", llm_model="m", llm_temperature=0.0,
         llm_reasoning=False, embed_model="e", data_dir=Path("data"),
-        chroma_dir=Path("data/chroma"), collection_name="c", ocr_lang="eng",
+        chroma_dir=Path("data/chroma"), collection_name="c", ocr_lang="eng", ocr_mode="auto", ocr_dpi=300,
         chunk_size=1000, chunk_overlap=150, top_k=3,
     )
     return Settings(**{**base, **overrides})

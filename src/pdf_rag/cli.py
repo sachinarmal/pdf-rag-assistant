@@ -13,8 +13,9 @@ def cmd_ingest(args) -> int:
     from .ingest import ingest_dir
 
     s = get_settings()
-    records = ingest_dir(s.raw_dir, s.pages_file, s.ocr_lang)
-    print(f"Saved {len(records)} page records -> {s.pages_file}")
+    records = ingest_dir(s.raw_dir, s.pages_file, s.ocr)
+    n_ocr = sum(r["metadata"]["method"] == "tesseract" for r in records)
+    print(f"Saved {len(records)} page records ({n_ocr} via OCR) -> {s.pages_file}")
     return 0
 
 
@@ -76,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     try:
         return args.func(args)
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 

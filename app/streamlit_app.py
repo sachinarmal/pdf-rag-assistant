@@ -40,7 +40,7 @@ with st.sidebar:
             saved.append(dest)
         try:
             with st.spinner("Extracting text..."):
-                records = ingest_files(saved, settings.pages_file, settings.ocr_lang)
+                records = ingest_files(saved, settings.pages_file, settings.ocr)
             with st.spinner(f"Embedding {len(records)} pages..."):
                 n = upsert_records(pipeline.store, records, settings)
             st.success(f"Indexed {n} chunks from {len(saved)} file(s).")

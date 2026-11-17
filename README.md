@@ -19,7 +19,7 @@ data/raw/ ─▶│  ingest.py   │──────────────�
                                                  └──────────────┘          └───────────┘
 ```
 
-1. **Ingest** (`pdf_rag.ingest`): reads each page with pdfplumber. Pages with fewer than 30 characters of text are treated as scans and run through Tesseract OCR. Tables are added as `a | b | c` rows under a `[TABLE]` marker. Each page becomes one JSON line with `source`, `page` and `method` metadata.
+1. **Ingest** (`pdf_rag.ingest`): reads each page with pdfplumber. A page is run through Tesseract OCR instead when it has almost no text (a scan) or when its text looks **garbled** (see [Marathi and other Devanagari PDFs](#marathi-and-other-devanagari-pdfs)). Tables from pages that weren't OCR'd are added as `a | b | c` rows under a `[TABLE]` marker. Each page becomes one JSON line with `source`, `page` and `method` (`pdfplumber` or `tesseract`) metadata.
 2. **Index** (`pdf_rag.indexing`): splits pages into overlapping chunks, embeds them with bge-m3 and stores them in a persistent Chroma collection. Re-indexing a file replaces its old chunks, so nothing is duplicated.
 3. **Answer** (`pdf_rag.qa`): retrieves the top-k chunks for a question and asks Qwen3 to answer **only** from that context, citing `[filename, p. N]`. Any `<think>` reasoning text is removed before the answer is shown.
 
@@ -52,8 +52,8 @@ Requires macOS or Linux, Python 3.10+, and [Ollama](https://ollama.com).
 ollama pull qwen3:14b
 ollama pull bge-m3
 
-# 2. Optional: OCR for scanned PDFs
-brew install tesseract            # Debian/Ubuntu: sudo apt install tesseract-ocr
+# 2. OCR, for scanned or Marathi PDFs (optional, but recommended)
+brew install tesseract tesseract-lang     # Debian/Ubuntu: sudo apt install tesseract-ocr tesseract-ocr-mar
 
 # 3. Python environment
 python3 -m venv .venv
@@ -80,11 +80,21 @@ All settings come from environment variables or a `.env` file in the directory y
 | `DATA_DIR` | `data` | Root for `raw/` and `processed/` |
 | `CHROMA_DIR` | `$DATA_DIR/chroma` | Vector store location |
 | `COLLECTION_NAME` | `pdf_rag` | Chroma collection |
-| `OCR_LANG` | `eng` | Tesseract languages, e.g. `eng+mar` |
+| `OCR_LANG` | `eng+mar` | Tesseract languages, joined with `+`; packs that aren't installed are skipped with a warning |
+| `OCR_MODE` | `auto` | `auto`: OCR pages with little or garbled text · `always`: OCR every page · `never`: no OCR |
+| `OCR_DPI` | `300` | Resolution of the page images used for OCR |
 | `CHUNK_SIZE` / `CHUNK_OVERLAP` | `1000` / `150` | Text splitting, in characters |
 | `TOP_K` | `5` | Chunks retrieved per question |
 
-Changing `EMBED_MODEL`, `CHUNK_SIZE` or `CHUNK_OVERLAP` requires running `pdf-rag index` again.
+Changing `EMBED_MODEL`, `CHUNK_SIZE` or `CHUNK_OVERLAP` requires running `pdf-rag index` again. Changing an `OCR_*` setting requires running `pdf-rag ingest` and then `pdf-rag index`.
+
+### Marathi and other Devanagari PDFs
+
+Many Indian government PDFs use fonts whose embedded text maps to the wrong Unicode characters. The page looks fine on screen, but the extracted text is wrong: `पवहले अवधिेशन` instead of `पहिले अधिवेशन`, `िैद्यिीय वशक्षण` instead of `वैद्यकीय शिक्षण`. That makes retrieval worse and leads the model to mistranslate. In one test, "Medical Education" came back as "Health and Family Welfare".
+
+In `auto` mode, ingestion spots this by counting two vowel signs in a row (such as `ाां`), which never happen in valid text. Broken pages score about 25–35 per 1,000 Devanagari characters and correct text scores about 0. Pages that cross the threshold are OCR'd with `OCR_LANG`. You need the Marathi language pack installed (`tesseract-lang` above). Without it, the page keeps its extracted text and a warning is printed.
+
+OCR takes about 3 s per page at 300 dpi, compared with milliseconds for plain text extraction.
 
 ## Usage
 
@@ -144,6 +154,7 @@ The unit tests replace Ollama, Chroma and Tesseract with fakes, so they run with
 
 ## Known limitations
 
-- **Text in non-Latin scripts.** Some PDFs, including many Marathi/Devanagari government documents, use fonts whose embedded text maps to the wrong characters. pdfplumber then returns readable-looking but garbled text, which hurts retrieval and translation quality. For those files, OCR usually works better: install the language pack (`brew install tesseract-lang`), set `OCR_LANG=eng+mar`, and force OCR by raising `MIN_TEXT_CHARS` in `ingest.py`.
+- Garbled-text detection only covers Devanagari. Broken font mappings in other scripts need `OCR_MODE=always`.
+- OCR output still has occasional single-character errors (e.g. `व` read as `a` or `ब`).
 - `pdf-rag ingest` and `pdf-rag index` rebuild everything from scratch. The web UI's upload adds or replaces individual files instead.
 - Retrieval is plain vector similarity, with no reranking or hybrid keyword search.

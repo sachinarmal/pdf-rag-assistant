@@ -30,6 +30,8 @@ class Settings:
     chroma_dir: Path
     collection_name: str
     ocr_lang: str
+    ocr_mode: str
+    ocr_dpi: int
     chunk_size: int
     chunk_overlap: int
     top_k: int
@@ -41,6 +43,11 @@ class Settings:
     @property
     def pages_file(self) -> Path:
         return self.data_dir / "processed" / "pages.jsonl"
+
+    @property
+    def ocr(self):
+        from .ingest import OcrOptions
+        return OcrOptions(lang=self.ocr_lang, mode=self.ocr_mode, dpi=self.ocr_dpi)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -54,7 +61,9 @@ class Settings:
             data_dir=data_dir,
             chroma_dir=Path(_env("CHROMA_DIR", str(data_dir / "chroma"))),
             collection_name=_env("COLLECTION_NAME", "pdf_rag"),
-            ocr_lang=_env("OCR_LANG", "eng"),
+            ocr_lang=_env("OCR_LANG", "eng+mar"),
+            ocr_mode=_env("OCR_MODE", "auto").strip().lower(),
+            ocr_dpi=int(_env("OCR_DPI", "300")),
             chunk_size=int(_env("CHUNK_SIZE", "1000")),
             chunk_overlap=int(_env("CHUNK_OVERLAP", "150")),
             top_k=int(_env("TOP_K", "5")),
